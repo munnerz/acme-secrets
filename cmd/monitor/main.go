@@ -148,7 +148,16 @@ func main() {
 							continue TLSLoop
 						}
 
-						glog.Errorf("Got certs: %s", certs)
+						secret := createSecret(t.SecretName, ing.Namespace, certs.Certificate, certs.PrivateKey)
+
+						secret, err = kubeClient.Secrets(ing.Namespace).Create(secret)
+
+						if err != nil {
+							glog.Errorf("error saving certificate to kubernetes: %s", err)
+							continue TLSLoop
+						}
+
+						glog.Errorf("Successfully saved secret %s", secret.Name)
 					}
 				}
 			} else {
@@ -169,7 +178,27 @@ func main() {
 	<-make(chan struct{})
 }
 
-func createSecretLock(name string, namespace string) *api.Secret {
+func createSecret(name, namespace string, cert, key []byte) *api.Secret {
+	return &api.Secret{
+		TypeMeta: unversioned.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: "v1",
+		},
+		ObjectMeta: api.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"acme-managed": "true",
+			},
+		},
+		Data: map[string][]byte{
+			"tls.crt": cert,
+			"tls.key": key,
+		},
+	}
+}
+
+func createSecretLock(name, namespace string) *api.Secret {
 	return &api.Secret{
 		TypeMeta: unversioned.TypeMeta{
 			Kind:       "Secret",
