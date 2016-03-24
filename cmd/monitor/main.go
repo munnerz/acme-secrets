@@ -184,12 +184,17 @@ func addIngFunc(obj interface{}) {
 
 				if len(errs) > 0 {
 					for _, err := range errs {
-						glog.Errorf("error acquiring locks: %s", err.Error())
+						glog.Errorf("error acquiring lock: %s", err.Error())
 					}
 					continue TLSLoop
 				}
 
-				defer lockSvc.UnlockAll(locks...)
+				defer func() {
+					_, errs := lockSvc.UnlockAll(locks...)
+					for _, err := range errs {
+						glog.Errorf("error releasing lock: %s", err.Error())
+					}
+				}()
 
 				glog.Errorf("acquired all locks for resource: %s", ing.Name)
 
