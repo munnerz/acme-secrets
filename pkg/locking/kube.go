@@ -2,6 +2,7 @@ package locking
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"k8s.io/kubernetes/pkg/api"
@@ -19,14 +20,14 @@ type KubeProvider struct {
 // the locks expiry time and if it's less than the current time, will acquire the lock for
 // itself
 func (kp *KubeProvider) Lock(lock Interface) (Interface, error) {
-	var secret *api.Secret
+	var secret, newSecret *api.Secret
 	var ok bool
 	var err error
 	if secret, ok = lock.GetObject().(*api.Secret); !ok {
 		return lock, fmt.Errorf("expected lock resource of type *api.Secret")
 	}
 
-	secret, err = kp.kubeClient.Secrets(secret.Namespace).Create(secret)
+	newSecret, err = kp.kubeClient.Secrets(secret.Namespace).Create(secret)
 
 	if err != nil {
 		ex, err := kp.kubeClient.Secrets(secret.Namespace).Get(secret.Name)
@@ -35,8 +36,10 @@ func (kp *KubeProvider) Lock(lock Interface) (Interface, error) {
 			return nil, fmt.Errorf("secret lock has already been deleted: %s", err.Error())
 		}
 
-		if time.Now().Before(lock.GetExpiry()) {
-			return nil, fmt.Errorf("existing lock is still valid, expires: %s", lock.GetExpiry().String())
+		if existingExpiry, err := lockExpiry(ex); err == nil {
+			if time.Now().Before(existingExpiry) {
+				return nil, fmt.Errorf("existing lock is still valid, expires: %s", existingExpiry.String())
+			}
 		}
 
 		err = kp.releaseKubeLock(ex)
@@ -45,14 +48,14 @@ func (kp *KubeProvider) Lock(lock Interface) (Interface, error) {
 			return nil, fmt.Errorf("secret lock has already been deleted: %s", err.Error())
 		}
 
-		secret, err = kp.kubeClient.Secrets(secret.Namespace).Create(secret)
+		newSecret, err = kp.kubeClient.Secrets(secret.Namespace).Create(secret)
 
 		if err != nil {
 			return nil, fmt.Errorf("another instance has acquired the lock: %s", err.Error())
 		}
 	}
 
-	if lock, err = NewKubeLock(secret); err != nil {
+	if lock, err = NewKubeLock(newSecret); err != nil {
 		return nil, fmt.Errorf("invalid response from kube apiserver: %s", err.Error())
 	}
 
@@ -88,6 +91,28 @@ func (kp *KubeProvider) releaseKubeLock(lock *api.Secret) error {
 		LabelsSelectorParam(labels.NewSelector().Add(*requirement)).
 		Do().
 		Error()
+}
+
+func lockExpiry(s *api.Secret) (time.Time, error) {
+	if exp, ok := s.Labels["acme-expiry"]; ok {
+		return expiryToTime(exp)
+	} else {
+		return time.Time{}, fmt.Errorf("no expiry label set on secret")
+	}
+}
+
+func expiryToTime(exp string) (time.Time, error) {
+	i, err := strconv.ParseInt(exp, 10, 64)
+
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	return time.Unix(0, i), nil
+}
+
+func timeToExpiry(t time.Time) string {
+	return fmt.Sprintf("%d", t.UnixNano())
 }
 
 func NewKubeProvider(kubeClient *client.Client) (*KubeProvider, error) {
