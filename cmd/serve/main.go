@@ -36,8 +36,13 @@ func Main(proxyURL *string) {
 	r := mux.NewRouter()
 
 	r.HandleFunc("/.well-known/acme-challenge/{key}", HandleChallenge)
+	r.NotFoundHandler = http.HandlerFunc(HandleRedirect)
 
 	glog.Fatalln(http.ListenAndServe(fmt.Sprintf("%s", *listenAddr), r))
+}
+
+func HandleRedirect(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, fmt.Sprintf("https://%s%s", r.Host, r.RequestURI), 301)
 }
 
 func HandleChallenge(w http.ResponseWriter, r *http.Request) {
