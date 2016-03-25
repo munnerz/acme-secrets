@@ -47,12 +47,8 @@ func NewSecretsProvider(kubeClient *client.Client, ns string) (*SecretsProvider,
 }
 
 type AcmeImpl struct {
-	client     *acme.Client
+	*acme.Client
 	kubeClient *client.Client
-}
-
-func (ai *AcmeImpl) ObtainCertificates(domains ...string) (acme.CertificateResource, map[string]error) {
-	return ai.client.ObtainCertificate(domains, true, nil)
 }
 
 func NewAcmeImpl(kubeClient *client.Client, server string, user User, rsaKeySize acme.KeyType) (*AcmeImpl, error) {
@@ -72,7 +68,7 @@ func NewAcmeImpl(kubeClient *client.Client, server string, user User, rsaKeySize
 	client.SetChallengeProvider(acme.HTTP01, sp)
 
 	return &AcmeImpl{
-		client:     client,
+		Client:     client,
 		kubeClient: kubeClient,
 	}, nil
 }

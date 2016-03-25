@@ -77,11 +77,10 @@ func main() {
 			if !reflect.DeepEqual(old, cur) {
 				glog.Infof("Ingress %v changed",
 					cur.(*extensions.Ingress).Name)
+				addIngFunc(cur)
 			}
 		},
-		DeleteFunc: func(obj interface{}) {
-			glog.Errorf("Something deleted")
-		},
+		DeleteFunc: func(obj interface{}) {},
 	})
 
 	<-make(chan struct{})
@@ -163,17 +162,38 @@ func addIngFunc(obj interface{}) {
 			return
 		}
 		if len(ing.Spec.TLS) > 0 {
-
-			// TODO: if acme managed, check if certificates are valid
-			// TODO: check if certificates exist
 		TLSLoop:
 			for _, t := range ing.Spec.TLS {
+				renew, update := false, false
+				existingSecret, err := getSecret(t.SecretName, ing.Namespace)
+				if err == nil {
+					if isAcmeManaged(existingSecret) {
+						cert, err := tlsCertificate(existingSecret)
+
+						if err == nil {
+							if time.Now().Add(time.Hour * 24 * 90).After(cert.NotAfter) {
+								renew = true
+							} else {
+								glog.Infof("[%s] existing certificate still valid. skipping...", t.SecretName)
+								continue TLSLoop
+							}
+						} else {
+							glog.Errorf("update due to err: %s", err.Error())
+							update = true
+						}
+
+					} else {
+						glog.Infof("[%s] existing secret marked as not managed by acme-tls already exists. skipping for safety...", t.SecretName)
+						continue TLSLoop
+					}
+				}
+
 				locks := make([]locking.Interface, len(t.Hosts))
 				for i, host := range t.Hosts {
 					lock, err := locking.NewKubeLock(createSecretLock(host, "acme"))
 
 					if err != nil {
-						glog.Errorf("error creating lock for host '%s': %s", host, err.Error())
+						glog.Errorf("[%s] error creating lock for host '%s': %s", t.SecretName, host, err.Error())
 						continue TLSLoop
 					}
 
@@ -184,7 +204,7 @@ func addIngFunc(obj interface{}) {
 
 				if len(errs) > 0 {
 					for _, err := range errs {
-						glog.Errorf("error acquiring lock: %s", err.Error())
+						glog.Errorf("[%s] error acquiring lock: %s", t.SecretName, err.Error())
 					}
 					continue TLSLoop
 				}
@@ -192,31 +212,71 @@ func addIngFunc(obj interface{}) {
 				defer func() {
 					_, errs := lockSvc.UnlockAll(locks...)
 					for _, err := range errs {
-						glog.Errorf("error releasing lock: %s", err.Error())
+						glog.Errorf("[%s] error releasing lock: %s", t.SecretName, err.Error())
 					}
 				}()
 
-				glog.Errorf("acquired all locks for resource: %s", ing.Name)
+				glog.Errorf("[%s] acquired all locks for resource: %s", t.SecretName, ing.Name)
 
-				certs, acmeErrs := acmeImpl.ObtainCertificates(t.Hosts...)
+				var certs acme.CertificateResource
+				var acmeErrs map[string]error
+				if renew {
+					cr, err := getCertificateResource(existingSecret)
 
-				if len(acmeErrs) > 0 {
-					for _, err := range acmeErrs {
-						glog.Errorf("failed retreiving certificates: %s", err.Error())
+					if err != nil {
+						glog.Errorf("[%s] error decoding certificate resource: %s", t.SecretName, err.Error())
+						continue TLSLoop
 					}
-					continue TLSLoop
+
+					cr.Certificate, err = getCertificateBytes(existingSecret)
+
+					if err != nil {
+						glog.Errorf("[%s] error retreiving existing tls certificate: %s", t.SecretName, err.Error())
+						continue TLSLoop
+					}
+
+					// ignore errors as a nil key will cause acme to generate a new one
+					cr.PrivateKey, _ = getPrivateKeyBytes(existingSecret)
+
+					certs, err = acmeImpl.RenewCertificate(*cr, true)
+
+					if err != nil {
+						glog.Errorf("[%s] failed renewing certificate: %s", t.SecretName, err.Error())
+						continue TLSLoop
+					}
+
+					glog.Errorf("[%s] renewed certificate for hosts: %s", t.SecretName, t.Hosts)
+				} else {
+					certs, acmeErrs = acmeImpl.ObtainCertificate(t.Hosts, true, nil)
+					if len(acmeErrs) > 0 {
+						for _, err := range acmeErrs {
+							glog.Errorf("failed retreiving certificates: %s", err.Error())
+						}
+						continue TLSLoop
+					}
+
+					glog.Errorf("[%s] obtained certificate for hosts: %s", t.SecretName, t.Hosts)
 				}
 
-				secret := createSecret(t.SecretName, ing.Namespace, certs.Certificate, certs.PrivateKey)
-
-				secret, err := kubeClient.Secrets(ing.Namespace).Create(secret)
+				secret, err := createSecret(t.SecretName, ing.Namespace, certs)
 
 				if err != nil {
-					glog.Errorf("error saving certificate to kubernetes: %s", err)
+					glog.Errorf("[%s] failed to create ingress secret: %s", t.SecretName, err.Error())
 					continue TLSLoop
 				}
 
-				glog.Errorf("Successfully saved secret %s", secret.Name)
+				if update || renew {
+					secret, err = kubeClient.Secrets(ing.Namespace).Update(secret)
+				} else {
+					secret, err = kubeClient.Secrets(ing.Namespace).Create(secret)
+				}
+
+				if err != nil {
+					glog.Errorf("[%s] error saving certificate to kubernetes: %s", t.SecretName, err)
+					continue TLSLoop
+				}
+
+				glog.Errorf("[%s] Successfully saved secret %s", t.SecretName, secret.Name)
 			}
 		}
 	} else {
@@ -224,7 +284,86 @@ func addIngFunc(obj interface{}) {
 	}
 }
 
-func createSecret(name, namespace string, cert, key []byte) *api.Secret {
+func getCertificateResource(s *api.Secret) (*acme.CertificateResource, error) {
+	nocr := fmt.Errorf("no certificate resource found on secret")
+	if s.Data == nil {
+		return nil, nocr
+	}
+	if crb, ok := s.Data["acme.certificate-resource"]; ok {
+		cr := new(acme.CertificateResource)
+
+		if err := json.Unmarshal(crb, cr); err != nil {
+			return nil, err
+		}
+
+		return cr, nil
+	}
+	return nil, nocr
+}
+
+func isAcmeManaged(s *api.Secret) bool {
+	if s.Labels == nil {
+		return false
+	}
+	if exp, ok := s.Labels["acme-managed"]; ok {
+		if exp == "true" {
+			return true
+		}
+	}
+	return false
+}
+
+func getCertificateBytes(s *api.Secret) ([]byte, error) {
+	nocrt := fmt.Errorf("no tls certificate exists")
+	if s.Data == nil {
+		return nil, nocrt
+	}
+
+	if crtb, ok := s.Data["tls.crt"]; ok {
+		return crtb, nil
+	}
+	return nil, nocrt
+}
+
+func getPrivateKeyBytes(s *api.Secret) ([]byte, error) {
+	nokey := fmt.Errorf("no tls key exists")
+	if s.Data == nil {
+		return nil, nokey
+	}
+
+	if crtb, ok := s.Data["tls.key"]; ok {
+		return crtb, nil
+	}
+	return nil, nokey
+}
+
+func tlsCertificate(s *api.Secret) (*x509.Certificate, error) {
+	var b []byte
+	var err error
+	if b, err = getCertificateBytes(s); err == nil {
+		block, _ := pem.Decode(b)
+		cert, err := x509.ParseCertificate(block.Bytes)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return cert, nil
+	}
+	return nil, err
+}
+
+func getSecret(name, namespace string) (*api.Secret, error) {
+	return kubeClient.Secrets(namespace).Get(fmt.Sprintf("%s", name))
+}
+
+func createSecret(name, namespace string, cr acme.CertificateResource) (*api.Secret, error) {
+	crBytes, err := json.Marshal(cr)
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.Secret{
 		TypeMeta: unversioned.TypeMeta{
 			Kind:       "Secret",
@@ -238,10 +377,11 @@ func createSecret(name, namespace string, cert, key []byte) *api.Secret {
 			},
 		},
 		Data: map[string][]byte{
-			"tls.crt": cert,
-			"tls.key": key,
+			"acme.certificate-resource": crBytes,
+			"tls.crt":                   cr.Certificate,
+			"tls.key":                   cr.PrivateKey,
 		},
-	}
+	}, nil
 }
 
 func createSecretLock(name, namespace string) *api.Secret {
