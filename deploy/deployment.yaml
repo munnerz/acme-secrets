@@ -1,0 +1,59 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: acme-secrets
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: acme-secrets
+    spec:
+      containers:
+      - name: serve
+        image: munnerz/acme-secrets:latest
+        command:
+        - "/acme-secrets"
+        args:
+        - "-serve"
+        ports:
+        - containerPort: 12000
+      - name: monitor
+        image: munnerz/acme-secrets:latest
+        command:
+        - "/acme-secrets"
+        args:
+        - "-monitor"
+        - "--acmeEmail"
+        - "email@address.com"
+        - "--acmeServer"
+        - "https://acme-v01.api.letsencrypt.org/directory"
+        volumeMounts:
+        - name: config
+          mountPath: "/config"
+          readOnly: true
+        - name: cacerts
+          mountPath: "/etc/ssl/certs"
+          readOnly: true
+      volumes:
+      - name: config
+        secret:
+          secretName: acme-secrets-user
+      - name: cacerts
+        hostPath:
+          path: "/usr/share/ca-certificates"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: acme-secrets
+  name: acme-secrets
+spec:
+  ports:
+  - name: http
+    port: 80
+    targetPort: 12000
+    protocol: TCP
+  selector:
+    app: acme-secrets
