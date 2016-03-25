@@ -1,11 +1,10 @@
-package main
+package monitor
 
 import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"reflect"
@@ -21,22 +20,23 @@ import (
 	"github.com/munnerz/acme-secrets/pkg/acmeimpl"
 	"github.com/munnerz/acme-secrets/pkg/locking"
 	"github.com/munnerz/acme-secrets/pkg/watcher"
+	"github.com/namsral/flag"
 	"github.com/xenolf/lego/acme"
 )
 
 var (
-	proxyURL   = flag.String("proxyURL", "", "URL to proxy connections to the apiserver")
-	acmeServer = flag.String("acmeServer", "https://acme-staging.api.letsencrypt.org/directory", "the acme server to request certificates from")
-	acmeEmail  = flag.String("acmeEmail", "", "the user email address for the acme server")
-	acmeKey    = flag.String("acmeKey", "", "path to the file containing the users private key")
-	acmeReg    = flag.String("acmeReg", "", "path to the json user registration file for acme")
+	acmeServer     = flag.String("acmeServer", "https://acme-staging.api.letsencrypt.org/directory", "the acme server to request certificates from")
+	acmeEmail      = flag.String("acmeEmail", "", "the user email address for the acme server")
+	acmeKey        = flag.String("acmeKey", "", "path to the file containing the users private key")
+	acmeReg        = flag.String("acmeReg", "", "path to the json user registration file for acme")
+	renewThreshold = flag.Duration("renewPeriod", time.Hour*24*30, "begin attempting to renew certificates this long before they expire")
 
 	kubeClient *client.Client
 	acmeImpl   *acmeimpl.AcmeImpl
 	lockSvc    *locking.Locking
 )
 
-func main() {
+func Main(proxyURL *string) {
 	flag.Parse()
 
 	if *proxyURL != "" {
@@ -171,7 +171,7 @@ func addIngFunc(obj interface{}) {
 						cert, err := tlsCertificate(existingSecret)
 
 						if err == nil {
-							if time.Now().Add(time.Hour * 24 * 90).After(cert.NotAfter) {
+							if time.Now().Add(*renewThreshold).After(cert.NotAfter) {
 								renew = true
 							} else {
 								glog.Infof("[%s] existing certificate still valid. skipping...", t.SecretName)

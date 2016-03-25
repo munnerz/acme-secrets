@@ -1,25 +1,24 @@
-package main
+package serve
 
 import (
-	"flag"
 	"fmt"
 	"net/http"
 
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
+	"github.com/namsral/flag"
 
 	"k8s.io/kubernetes/pkg/api"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
 )
 
 var (
-	proxyURL   = flag.String("proxyURL", "", "URL to proxy connections to the apiserver")
 	listenAddr = flag.String("listenAddr", "0.0.0.0:12000", "the address to listen on for incoming http requests")
 
 	kubeClient *client.Client
 )
 
-func main() {
+func Main(proxyURL *string) {
 	flag.Parse()
 
 	if *proxyURL != "" {
