@@ -95,6 +95,10 @@
 			"Rev": "f8964231a81dcbe9fc5f13a228c7f10a933acc50"
 		},
 		{
+			"ImportPath": "github.com/namsral/flag",
+			"Rev": "881a43080604bcf99ab1118a814d1cb2c268fc36"
+		},
+		{
 			"ImportPath": "github.com/opencontainers/runc/libcontainer/cgroups",
 			"Comment": "v0.0.7",
 			"Rev": "7ca2aa4873aea7cb4265b1726acb24b90d8726c6"

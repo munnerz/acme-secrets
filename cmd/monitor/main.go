@@ -27,8 +27,8 @@ import (
 var (
 	acmeServer     = flag.String("acmeServer", "https://acme-staging.api.letsencrypt.org/directory", "the acme server to request certificates from")
 	acmeEmail      = flag.String("acmeEmail", "", "the user email address for the acme server")
-	acmeKey        = flag.String("acmeKey", "", "path to the file containing the users private key")
-	acmeReg        = flag.String("acmeReg", "", "path to the json user registration file for acme")
+	acmeKey        = flag.String("acmeKey", "/config/private.key", "path to the file containing the users private key")
+	acmeReg        = flag.String("acmeReg", "/config/acme-reg.json", "path to the json user registration file for acme")
 	renewThreshold = flag.Duration("renewPeriod", time.Hour*24*30, "begin attempting to renew certificates this long before they expire")
 
 	kubeClient *client.Client

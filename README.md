@@ -1,4 +1,4 @@
-# acme-secrets
+# acme-secrets [![Build Status](https://travis-ci.org/munnerz/acme-secrets.svg?branch=master)](https://travis-ci.org/munnerz/acme-secrets)
 
 _STILL IN DEVELOPMENT_
 
