@@ -9,13 +9,14 @@ An acme client that integrates with Kubernetes to automatically generate and ren
 ## Current features
 
 * Automatically retreive TLS certificates from an ACME server
-* Renew certificates automatically every x days
 * Plug in to existing ingress controllers
 
 ## Planned features
 
+* Renew certificates automatically every x days
 * Regularly monitoring existing Ingress resources to ensure they're up to date
 * TLSSNI01 support
+* Automatic configuration of Ingress resources to add the /.well-known/acme-challenge endpoint
 
 ## Usage
 
