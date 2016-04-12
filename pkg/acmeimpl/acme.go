@@ -1,54 +1,28 @@
 package acmeimpl
 
 import (
-	"fmt"
-
 	"github.com/xenolf/lego/acme"
 
 	client "k8s.io/kubernetes/pkg/client/unversioned"
 )
 
-type SecretsProvider struct {
-	kubeClient *client.Client
-	namespace  string
-}
-
-func (sp *SecretsProvider) Present(domain, token, keyAuth string) error {
-	secret, err := sp.kubeClient.Secrets(sp.namespace).Get(fmt.Sprintf("%s-acme", domain))
-
-	if err != nil {
-		return err
-	}
-
-	if secret.Data == nil {
-		secret.Data = make(map[string][]byte)
-	}
-	secret.Data["acme-token"] = []byte(token)
-	secret.Data["acme-auth"] = []byte(keyAuth)
-
-	secret, err = sp.kubeClient.Secrets(sp.namespace).Update(secret)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (sp *SecretsProvider) CleanUp(domain, token, keyAuth string) error {
-	return nil
-}
-
-func NewSecretsProvider(kubeClient *client.Client, ns string) (*SecretsProvider, error) {
-	return &SecretsProvider{
-		kubeClient: kubeClient,
-		namespace:  ns,
-	}, nil
+type Interface interface {
+	Perform(*CertificateRequest) (*acme.CertificateResource, error)
 }
 
 type AcmeImpl struct {
 	*acme.Client
 	kubeClient *client.Client
+}
+
+func (a *AcmeImpl) Perform(cr *CertificateRequest) (acme.CertificateResource, error) {
+	if cr.IsRenewal {
+		return a.RenewCertificate(cr.ExistingResource, true)
+	}
+
+	res, errs := a.ObtainCertificate(cr.Hosts, true, cr.privateKey)
+
+	return res, mapErrsToErr(errs)
 }
 
 func NewAcmeImpl(kubeClient *client.Client, server string, user User, rsaKeySize acme.KeyType) (*AcmeImpl, error) {
