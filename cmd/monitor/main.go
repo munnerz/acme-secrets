@@ -218,8 +218,10 @@ func addIngFunc(obj interface{}) {
 
 				glog.Errorf("[%s] acquired all locks for resource: %s", t.SecretName, ing.Name)
 
-				var certs acme.CertificateResource
-				var acmeErrs map[string]error
+				req := acmeimpl.CertificateRequest{
+					Hosts: t.Hosts,
+				}
+
 				if renew {
 					cr, err := getCertificateResource(existingSecret)
 
@@ -228,34 +230,22 @@ func addIngFunc(obj interface{}) {
 						continue TLSLoop
 					}
 
-					cr.Certificate, err = getCertificateBytes(existingSecret)
-
-					if err != nil {
+					if cr.Certificate == nil {
 						glog.Errorf("[%s] error retreiving existing tls certificate: %s", t.SecretName, err.Error())
 						continue TLSLoop
 					}
 
-					// ignore errors as a nil key will cause acme to generate a new one
-					cr.PrivateKey, _ = getPrivateKeyBytes(existingSecret)
-
-					certs, err = acmeImpl.RenewCertificate(*cr, true)
-
-					if err != nil {
-						glog.Errorf("[%s] failed renewing certificate: %s", t.SecretName, err.Error())
-						continue TLSLoop
+					req = acmeimpl.CertificateRequest{
+						IsRenewal:        true,
+						ExistingResource: *cr,
 					}
+				}
 
-					glog.Errorf("[%s] renewed certificate for hosts: %s", t.SecretName, t.Hosts)
-				} else {
-					certs, acmeErrs = acmeImpl.ObtainCertificate(t.Hosts, true, nil)
-					if len(acmeErrs) > 0 {
-						for _, err := range acmeErrs {
-							glog.Errorf("failed retreiving certificates: %s", err.Error())
-						}
-						continue TLSLoop
-					}
+				certs, err := acmeImpl.Perform(req)
 
-					glog.Errorf("[%s] obtained certificate for hosts: %s", t.SecretName, t.Hosts)
+				if err != nil {
+					glog.Errorf("[%s] failed to obtain certificate for hosts '%s': %s", t.SecretName, t.Hosts, err.Error())
+					continue TLSLoop
 				}
 
 				secret, err := createSecret(t.SecretName, ing.Namespace, certs)
@@ -285,20 +275,32 @@ func addIngFunc(obj interface{}) {
 }
 
 func getCertificateResource(s *api.Secret) (*acme.CertificateResource, error) {
-	nocr := fmt.Errorf("no certificate resource found on secret")
+	nocr := fmt.Errorf("no certificate resource data found on secret")
 	if s.Data == nil {
 		return nil, nocr
 	}
-	if crb, ok := s.Data["acme.certificate-resource"]; ok {
-		cr := new(acme.CertificateResource)
 
-		if err := json.Unmarshal(crb, cr); err != nil {
-			return nil, err
-		}
+	var cr *acme.CertificateResource
+	var crb []byte
+	var ok bool
 
-		return cr, nil
+	if crb, ok = s.Data["acme.certificate-resource"]; !ok {
+		return nil, nocr
 	}
-	return nil, nocr
+
+	if err := json.Unmarshal(crb, cr); err != nil {
+		return nil, err
+	}
+
+	if crt, ok := s.Data["tls.crt"]; ok {
+		cr.Certificate = crt
+	}
+
+	if key, ok := s.Data["tls.key"]; ok {
+		cr.PrivateKey = key
+	}
+
+	return cr, nil
 }
 
 func isAcmeManaged(s *api.Secret) bool {
@@ -311,30 +313,6 @@ func isAcmeManaged(s *api.Secret) bool {
 		}
 	}
 	return false
-}
-
-func getCertificateBytes(s *api.Secret) ([]byte, error) {
-	nocrt := fmt.Errorf("no tls certificate exists")
-	if s.Data == nil {
-		return nil, nocrt
-	}
-
-	if crtb, ok := s.Data["tls.crt"]; ok {
-		return crtb, nil
-	}
-	return nil, nocrt
-}
-
-func getPrivateKeyBytes(s *api.Secret) ([]byte, error) {
-	nokey := fmt.Errorf("no tls key exists")
-	if s.Data == nil {
-		return nil, nokey
-	}
-
-	if crtb, ok := s.Data["tls.key"]; ok {
-		return crtb, nil
-	}
-	return nil, nokey
 }
 
 func tlsCertificate(s *api.Secret) (*x509.Certificate, error) {
