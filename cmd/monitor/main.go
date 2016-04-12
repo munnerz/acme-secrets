@@ -1,7 +1,7 @@
 package monitor
 
 import (
-	"crypto/rsa"
+	"crypto"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -119,7 +119,7 @@ func initKubeLockService(client *client.Client) (*locking.Locking, error) {
 	return lockSvc, nil
 }
 
-func loadAcmePrivateKey(file string) (*rsa.PrivateKey, error) {
+func loadAcmePrivateKey(file string) (crypto.PrivateKey, error) {
 	key, err := ioutil.ReadFile(file)
 
 	if err != nil {
@@ -128,13 +128,17 @@ func loadAcmePrivateKey(file string) (*rsa.PrivateKey, error) {
 
 	block, _ := pem.Decode(key)
 
-	privKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-
-	if err != nil {
-		return nil, fmt.Errorf("error decoding private key: %s", err.Error())
+	switch block.Type {
+	case "RSA PRIVATE KEY":
+		privKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil { return nil, fmt.Errorf("error decoding private key: %s", err.Error()) }
+		return privKey, nil
+	case "EC PRIVATE KEY":
+		privKey, err := x509.ParseECPrivateKey(block.Bytes)
+		if err != nil { return nil, fmt.Errorf("error decoding private key: %s", err.Error()) }
+		return privKey, nil
 	}
-
-	return privKey, nil
+	return nil, fmt.Errorf("Unknown private key type")
 }
 
 func loadAcmeRegistration(file string) (*acme.RegistrationResource, error) {
