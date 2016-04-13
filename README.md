@@ -17,6 +17,7 @@ An acme client that integrates with Kubernetes to automatically generate and ren
 * Regularly monitoring existing Ingress resources to ensure they're up to date
 * TLSSNI01 support
 * Automatic configuration of Ingress resources to add the /.well-known/acme-challenge endpoint
+* Automatically retreive and store user account and private key to ease setup
 
 ## Usage
 
