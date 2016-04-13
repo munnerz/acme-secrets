@@ -20,7 +20,7 @@ func (a *AcmeImpl) Perform(cr *CertificateRequest) (acme.CertificateResource, er
 		return a.RenewCertificate(cr.ExistingResource, true)
 	}
 
-	res, errs := a.ObtainCertificate(cr.Hosts, true, cr.privateKey)
+	res, errs := a.ObtainCertificate(cr.Hosts, true, cr.PrivateKey)
 
 	return res, mapErrsToErr(errs)
 }
