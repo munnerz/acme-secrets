@@ -186,7 +186,7 @@ func acquireAllLocks(names []string) ([]locking.Interface, error) {
 }
 
 func getCertificateRequest(name, namespace string, hosts []string) (*acmeimpl.CertificateRequest, bool, error) {
-	existingSecret, err := getSecret(name, namespace)
+	existingSecret, err := kubeClient.Secrets(namespace).Get(name)
 
 	cr := &acmeimpl.CertificateRequest{
 		Hosts: hosts,
@@ -270,17 +270,23 @@ func addIngFunc(obj interface{}) {
 					continue TLSLoop
 				}
 
-				secret, err := createSecret(t.SecretName, ing.Namespace, certs)
+				tlsSecret := monitor.DefaultTLSSecret{
+					Name:                t.SecretName,
+					Namespace:           ing.Namespace,
+					CertificateResource: certs,
+				}
+
+				secret, err := tlsSecret.Secret()
 
 				if err != nil {
-					glog.Errorf("[%s] failed to create ingress secret: %s", t.SecretName, err.Error())
+					glog.Errorf("[%s] failed to create ingress secret: %s", tlsSecret.Name, err.Error())
 					continue TLSLoop
 				}
 
 				if secretExists {
-					secret, err = kubeClient.Secrets(ing.Namespace).Update(secret)
+					secret, err = kubeClient.Secrets(secret.Namespace).Update(secret)
 				} else {
-					secret, err = kubeClient.Secrets(ing.Namespace).Create(secret)
+					secret, err = kubeClient.Secrets(secret.Namespace).Create(secret)
 				}
 
 				if err != nil {
@@ -288,7 +294,7 @@ func addIngFunc(obj interface{}) {
 					continue TLSLoop
 				}
 
-				glog.Errorf("[%s] Successfully saved secret %s", t.SecretName, secret.Name)
+				glog.Errorf("[%s] Successfully saved secret", secret.Name)
 			}
 		}
 	} else {
@@ -306,37 +312,6 @@ func isAcmeManaged(s *api.Secret) bool {
 		}
 	}
 	return false
-}
-
-func getSecret(name, namespace string) (*api.Secret, error) {
-	return kubeClient.Secrets(namespace).Get(fmt.Sprintf("%s", name))
-}
-
-func createSecret(name, namespace string, cr acme.CertificateResource) (*api.Secret, error) {
-	crBytes, err := json.Marshal(cr)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &api.Secret{
-		TypeMeta: unversioned.TypeMeta{
-			Kind:       "Secret",
-			APIVersion: "v1",
-		},
-		ObjectMeta: api.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"acme-managed": "true",
-			},
-		},
-		Data: map[string][]byte{
-			"acme.certificate-resource": crBytes,
-			"tls.crt":                   cr.Certificate,
-			"tls.key":                   cr.PrivateKey,
-		},
-	}, nil
 }
 
 func createSecretLock(name, namespace string) *api.Secret {
