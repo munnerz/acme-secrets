@@ -10,8 +10,9 @@ script:
     - CGO_ENABLED=0 go build -a -installsuffix cgo github.com/munnerz/acme-secrets
 
 after_success:
-    - if [ "$TRAVIS_BRANCH" = "master"]; then DOCKER_TAG='latest'; else DOCKER_TAG=$TRAVIS_BRANCH; fi
-    - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then docker build -t $DOCKER_IMAGE:$DOCKER_TAG .; fi
-    - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then docker login -e "$DOCKER_EMAIL" -u "$DOCKER_USER" -p "$DOCKER_PASS"; fi
-    - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then docker push $DOCKER_IMAGE:$DOCKER_TAG; fi
+    - if [ "$TRAVIS_PULL_REQUEST" = "false" -a "$TRAVIS_BRANCH" = "master" ]; then DOCKER_TAG='latest'; MAKE_DOCKER='true'; fi
+    - if [ "$TRAVIS_PULL_REQUEST" = "false" -a "$TRAVIS_BRANCH" != "master" -a "$DOCKER_MAKEBRANCH" = "true" ]; then DOCKER_TAG=$TRAVIS_BRANCH; MAKE_DOCKER='true'; fi
+    - if [ "$MAKE_DOCKER" = "true" ]; then docker build -t $DOCKER_IMAGE:$DOCKER_TAG .; fi
+    - if [ "$MAKE_DOCKER" = "true" ]; then docker login -e "$DOCKER_EMAIL" -u "$DOCKER_USER" -p "$DOCKER_PASS"; fi
+    - if [ "$MAKE_DOCKER" = "true" ]; then docker push $DOCKER_IMAGE:$DOCKER_TAG; fi
 
