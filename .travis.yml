@@ -6,9 +6,9 @@ install:
     - true
 
 script:
-    - CGO_ENABLED=0 go build -a -installsuffix cgo github.com/munnerz/acme-secrets
+    - CGO_ENABLED=0 go build -a -installsuffix cgo github.com/munnerz/kube-acme
 
 after_success:
-    - if [ "$TRAVIS_BRANCH" = "master" -a "$TRAVIS_PULL_REQUEST" = "false" ]; then docker build -t munnerz/acme-secrets:latest .; fi
+    - if [ "$TRAVIS_BRANCH" = "master" -a "$TRAVIS_PULL_REQUEST" = "false" ]; then docker build -t munnerz/kube-acme:latest .; fi
     - if [ "$TRAVIS_BRANCH" = "master" -a "$TRAVIS_PULL_REQUEST" = "false" ]; then docker login -e "$DOCKER_EMAIL" -u "$DOCKER_USER" -p "$DOCKER_PASS"; fi
-    - if [ "$TRAVIS_BRANCH" = "master" -a "$TRAVIS_PULL_REQUEST" = "false" ]; then docker push munnerz/acme-secrets:latest; fi
+    - if [ "$TRAVIS_BRANCH" = "master" -a "$TRAVIS_PULL_REQUEST" = "false" ]; then docker push munnerz/kube-acme:latest; fi

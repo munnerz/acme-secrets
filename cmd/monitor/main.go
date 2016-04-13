@@ -19,10 +19,10 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/hashicorp/go-multierror"
-	"github.com/munnerz/acme-secrets/pkg/acmeimpl"
-	"github.com/munnerz/acme-secrets/pkg/locking"
-	"github.com/munnerz/acme-secrets/pkg/monitor"
-	"github.com/munnerz/acme-secrets/pkg/watcher"
+	"github.com/munnerz/kube-acme/pkg/acmeimpl"
+	"github.com/munnerz/kube-acme/pkg/locking"
+	"github.com/munnerz/kube-acme/pkg/monitor"
+	"github.com/munnerz/kube-acme/pkg/watcher"
 	"github.com/namsral/flag"
 	"github.com/xenolf/lego/acme"
 )
@@ -219,7 +219,7 @@ func getCertificateRequest(name, namespace string, hosts []string) (*acmeimpl.Ce
 	}
 
 	if time.Now().Add(*renewThreshold).Before(expiry) {
-		return nil, true, fmt.Errorf("secret '%s' already exists and is valid until %s", expiry)
+		return nil, true, fmt.Errorf("secret '%s' already exists and is valid until %s", name, expiry)
 	}
 
 	return &acmeimpl.CertificateRequest{

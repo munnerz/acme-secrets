@@ -1,5 +1,5 @@
 FROM scratch
 
-ADD acme-secrets /acme-secrets
+ADD kube-acme /kube-acme
 
-ENTRYPOINT ["/acme-secrets]
+ENTRYPOINT ["/kube-acme]

@@ -1,8 +1,8 @@
-# acme-secrets [![Build Status](https://travis-ci.org/munnerz/acme-secrets.svg?branch=master)](https://travis-ci.org/munnerz/acme-secrets)
+# kube-acme [![Build Status](https://travis-ci.org/munnerz/kube-acme.svg?branch=master)](https://travis-ci.org/munnerz/kube-acme)
 
 _STILL IN DEVELOPMENT_
 
-acme-secrets allows you to enable TLS for your Kubernetes services, without having to think about it.
+kube-acme allows you to enable TLS for your Kubernetes services, without having to think about it.
 
 An acme client that integrates with Kubernetes to automatically generate and renew certificates and store them in secrets to be served by whichever ingress controller you use.
 

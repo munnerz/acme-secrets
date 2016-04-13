@@ -2,8 +2,8 @@ package main
 
 import (
 	"github.com/golang/glog"
-	"github.com/munnerz/acme-secrets/cmd/monitor"
-	"github.com/munnerz/acme-secrets/cmd/serve"
+	"github.com/munnerz/kube-acme/cmd/monitor"
+	"github.com/munnerz/kube-acme/cmd/serve"
 	"github.com/namsral/flag"
 )
 

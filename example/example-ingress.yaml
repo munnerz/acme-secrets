@@ -18,8 +18,8 @@ spec:
           serviceName: backend-service
           servicePort: 80
 ---
-# We add this to any ingress we want to use acme-secrets for
-# acme-secrets will 301 redirect traffic to the https scheme
+# We add this to any ingress we want to use kube-acme for
+# kube-acme will 301 redirect traffic to the https scheme
 # if your ingress controller doesn't already
 apiVersion: extensions/v1beta1
 kind: Ingress
@@ -32,5 +32,5 @@ spec:
       paths:
       - path: /
         backend:
-          serviceName: acme-secrets
+          serviceName: kube-acme
           servicePort: 80
