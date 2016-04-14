@@ -1,0 +1,14 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: some.domain.tld-acme
+spec:
+  rules:
+  - host: some.domain.tld
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: kube-acme
+          servicePort: 80
+

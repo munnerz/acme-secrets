@@ -1,0 +1,20 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: echo
+  labels:
+    acme-tls: "true"
+spec:
+  tls:
+  - secretName: some.domain.tld-acmetls
+    hosts:
+    - some.domain.tld
+  rules:
+  - host: some.domain.tld
+    http:
+      paths:
+      - path: /echo
+        backend:
+          serviceName: echo
+          servicePort: 8080
+

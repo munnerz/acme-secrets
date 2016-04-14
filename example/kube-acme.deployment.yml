@@ -1,0 +1,59 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: kube-acme
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: kube-acme
+    spec:
+      containers:
+      - name: serve
+        image: munnerz/kube-acme:latest
+        command:
+        - "/kube-acme"
+        args:
+        - "-serve"
+        ports:
+        - containerPort: 12000
+      - name: monitor
+        image: munnerz/kube-acme:latest
+        command:
+        - "/kube-acme"
+        args:
+        - "-monitor"
+        - "--acmeEmail"
+        - "email@address.com"
+        - "--acmeServer"
+        - "https://acme-staging.api.letsencrypt.org/directory"
+        volumeMounts:
+        - name: config
+          mountPath: "/config"
+          readOnly: true
+        - name: cacerts
+          mountPath: "/etc/ssl/certs"
+          readOnly: true
+      volumes:
+      - name: config
+        secret:
+          secretName: kube-acme-user
+      - name: cacerts
+        hostPath:
+          path: "/usr/share/ca-certificates"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: kube-acme
+  name: kube-acme
+spec:
+  ports:
+  - name: http
+    port: 80
+    targetPort: 12000
+    protocol: TCP
+  selector:
+    app: kube-acme
