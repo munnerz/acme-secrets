@@ -24,7 +24,7 @@ echo
 read
 echo "Processing..."
 
-TMPDIR="$(pwd)/.k8s-lego-tmp/"
+TMPDIR="$(pwd)/.kube-acme-tmp/"
 rm -rf $TMPDIR
 
 wget https://github.com/xenolf/lego/releases/download/v0.3.0/lego_linux_amd64.tar.xz -c -P $TMPDIR -q
@@ -61,6 +61,6 @@ echo
 echo "###  "
 echo "###  Make sure you put this information in a safe place"
 echo "###  it is alredy deleted from temporary storage on your account"
-echo "###  so there is no other way to secure this then by storing it in a safe place now"
+echo "###  so there is no other way to secure this other than to store it in a safe place now"
 echo "###  "
 echo

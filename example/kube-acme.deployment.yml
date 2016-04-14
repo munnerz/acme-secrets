@@ -41,19 +41,7 @@ spec:
           secretName: kube-acme-user
       - name: cacerts
         hostPath:
+          # This path can differ between distributions (this example is tested on CoreOS).
+          # Make sure you use one that contains the ca certificates in your case
           path: "/usr/share/ca-certificates"
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: kube-acme
-  name: kube-acme
-spec:
-  ports:
-  - name: http
-    port: 80
-    targetPort: 12000
-    protocol: TCP
-  selector:
-    app: kube-acme
+

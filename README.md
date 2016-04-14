@@ -23,10 +23,11 @@ An acme client that integrates with Kubernetes to automatically generate and ren
 
 ### Initial setup
 
-At the moment kube-acme is to some extent limited by namespaces, and aspecially the inability
+At the moment kube-acme is to some extent limited by namespaces, and especially the inability
 of ingress to reference service from different namespace. This means that for an ingress
 to be able to properly work, a "local" (as in the "same namespace") kube-acme service is required.
-Still, to properly establish locks, a dedicated "acme" namespace is expected to exist.
+
+To properly establish locks, a dedicated "acme" namespace is expected to exist:
 
 ```
 kind: Namespace
@@ -35,8 +36,12 @@ metadata:
   name: acme
 ```
 
-To connect to the acme server a registers user is required (while this will most likely be handled by `kube-acme` in future,
-at the moment a secret has to be created containing all the required information like in example below
+A user must be registered with the acme server in order to retrieve certificates, and it's credentials stored in a secret for `kube-acme` to read. 
+Currently this is a manual process, although will most like be handled by kube-acme in future.
+
+To generate this secrets contents you can use `example/getusersecret.sh -e your@email.com -s acme-staging.api.letsencrypt.org`. 
+In the example, we register with the letsencrypt staging server. In production, you will probably want to use the live letsencrypt server: https://acme-v01.api.letsencrypt.org to retrieve certificates (or any other acme compliant server)
+
 
 ```
 apiVersion: v1
@@ -49,38 +54,24 @@ data:
   acme-reg.json: ewogICJ0ZXJtc19vZl9zZXJ2aWNlIjogImh0dHBzOi8vbGV0c2VuY3J5cHQub3JnL2RvY3VtZW50cy9MRS1TQS12MS4wLjEtSnVseS0yNy0yMDE1LnBkZiIsCiAgIm5ld19hdXRoenJfdXJpIjogImh0dHBzOi8vYWNtZS1zdGFnaW5nLmFwaS5sZXRzZW5jcnlwdC5vcmcvYWNtZS9uZXctYXV0aHoiLAogICJ1cmkiOiAiaHR0cHM6Ly9hY21lLXN0YWdpbmcuYXBpLmxldHNlbmNyeXB0Lm9yZy9hY21lL3JlZy8xNzg5NzkiLAogICJib2R5IjogewogICAgImFncmVlbWVudCI6ICJodHRwczovL2xldHNlbmNyeXB0Lm9yZy9kb2N1bWVudHMvTEUtU0EtdjEuMC4xLUp1bHktMjctMjAxNS5wZGYiLAogICAgImNvbnRhY3QiOiBbCiAgICAgICJtYWlsdG86ZGVtb0BkZW1vLmNvbSIKICAgIF0sCiAgICAia2V5IjogewogICAgICAieSI6ICJLYmZPY3c1X0NHVWFVOXoxS1ljWVo2ODItbTV0OXYyT05NUTFIVV80dGZTYlF0SEE5cTQ0T0NpLS0xbDdVX291IiwKICAgICAgIngiOiAiZFR4bGFPdjNuUDZSaXY5Qk1ES0U4SmFVaEpyUDB4NTFHWjBITmo4VnZwdEM4WGdVTElGMFBBVlptWEJZUGlrUCIsCiAgICAgICJjcnYiOiAiUC0zODQiLAogICAgICAia3R5IjogIkVDIgogICAgfSwKICAgICJpZCI6IDE3ODk3OSwKICAgICJyZXNvdXJjZSI6ICJyZWciCiAgfQp9Cg==
 ```
 
-To generate this, you can use `example/getusersecret.sh -e your@email.com -s acme-staging.api.letsencrypt.org`. 
-This one obviously uses staging letsencrypt servers so you need to change to production one (acme-v01.api.letsencrypt.org) when going prod.
-
 At this point you can create a service and deployment in your namespace from `example/deployment.yaml` and `example/service.yaml`. 
 Remember to update --acme-email and --acme-server to their correct values in the deployment.
 
-You now have kube-acme ready to handle your certificates in the namespace they are provisioned in.
+You now have kube-acme ready to handle your certificates in the namespace it is provisioned in.
 
 ### Setting ingress to use ACME secrets
 
 Assuming you have completed the initial setup described above, you can now proceed with defining acme enabled ingress. 
-Start by creating a new secret that your ingress will reference, and make sure the secret is acme enabled
 
-```
-apiVersion: v1
-kind: Secret
-metadata:
-  name: some.domain.tld-acmetls
-  labels:
-    acme-managed: 'true'
-type: Opaque
-data:
-```
+Before you proceed with creating ingresses to handle your incoming traffic you should point the domain name 
+to the ingress controller IP address. In some cases (ie. when each ingress gets a separate IP after it is created) 
+this will not be possible. In such situations you need to create the ingress, point the domain name to the new 
+assigned IP and then modify ingress (ie. by adding/changing a custom label) so that `kube-acme` is forced to attempt 
+certificate generation again. 
 
-> Remember this should be done once, and once only. If you apply this secret again you may end up wiping a valid certificate.
-
-Before you proceed with creating ingresses to handle your incoming traffic it is preferable that you alredy point 
-the domain name to the ingress controller IP address. In some cases (ie. when each ingress gets a separate IP 
-after it is created) this will not be possible. In such situations you need to create the ingress, point the domain name 
-to the new assigned IP and then modify ingress (ie. by adding/changing a custom label) so that `kube-acme` is forced 
-to attempt certificate generation again. Before you create the actual TLS enabled ingress, you need an HTTP ingress 
-to respond to acme-challenge.
+As kube-acme must respond to challenge requests via HTTP (not HTTPS), your ingress controller must route unencrypted 
+traffic for the `/.well-known/acme-challenge` to kube-acme. At the moment, how this is best to be achieved is dependant 
+on your ingress controllers implementation. Some options are discussed in https://github.com/munnerz/kube-acme/issues/9
 
 ```
 apiVersion: extensions/v1beta1
@@ -98,8 +89,8 @@ spec:
           servicePort: 80
 ```
 
-This will route all traffic for this domain on using http:// to kube-acme service. 
-Apart of serving the `/.well-known/acme-challenge/` to respond to the challenge requests, 
+This example will route all traffic for this domain on using http:// to kube-acme service. 
+As well as serving `/.well-known/acme-challenge/` to respond to the challenge requests, 
 `kube-acme` redirects all http:// traffic to https:// so it can reside on `/` path 
 and make sure all non-acme-challenge traffic goes via encrypted channel. 
 With this in place an acme enabled tls ingress can be created
