@@ -1,0 +1,47 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: kube-acme
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: kube-acme
+    spec:
+      containers:
+      - name: serve
+        image: munnerz/kube-acme:latest
+        command:
+        - "/kube-acme"
+        args:
+        - "-serve"
+        ports:
+        - containerPort: 12000
+      - name: monitor
+        image: munnerz/kube-acme:latest
+        command:
+        - "/kube-acme"
+        args:
+        - "-monitor"
+        - "--acmeEmail"
+        - "email@address.com"
+        - "--acmeServer"
+        - "https://acme-staging.api.letsencrypt.org/directory"
+        volumeMounts:
+        - name: config
+          mountPath: "/config"
+          readOnly: true
+        - name: cacerts
+          mountPath: "/etc/ssl/certs"
+          readOnly: true
+      volumes:
+      - name: config
+        secret:
+          secretName: kube-acme-user
+      - name: cacerts
+        hostPath:
+          # This path can differ between distributions (this example is tested on CoreOS).
+          # Make sure you use one that contains the ca certificates in your case
+          path: "/usr/share/ca-certificates"
+
